@@ -31,27 +31,26 @@
 
 </plot>
 
-#### not showing the inner stacked plot ####
-#<plot>
-#	type = scatter
-#	file = ./../data_tracks/stacked.txt
-#	r1 = 0.20r
-#	r0 = 0.05r
-#	glyph = rectangle
-#	glyph_size = 8
-#	fill_color = 116,196,118
-#	stroke_color = vvdgrey
-#	stroke_thickness = 0
-#	orientation = in
-#
-#	<axes>
-#		<axis>
-#			color     = lgrey
-#			thickness = 0
-#		</axis>
-#	</axes>
-#
-#</plot>
+<plot>
+	type = scatter
+	file = ./../data_tracks/stacked.txt
+	r1 = 0.20r
+	r0 = 0.05r
+	glyph = rectangle
+	glyph_size = 8
+	fill_color = 116,196,118
+	stroke_color = vvdgrey
+	stroke_thickness = 1
+	orientation = in
+
+	<axes>
+		<axis>
+			color     = lgrey
+			thickness = 0.5
+		</axis>
+	</axes>
+
+</plot>
 
 <plot>
 	type = text

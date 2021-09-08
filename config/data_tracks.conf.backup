@@ -16,7 +16,7 @@
 	r1 = 0.975r
 	r0 = 0.225r
 	glyph = circle
-	glyph_size = 14
+	glyph_size = 12
 	fill_color = 116,196,118
 	stroke_color = vvdgrey
 	stroke_thickness = 1
@@ -25,33 +25,39 @@
 	<axes>
 		<axis>
 			color = vvvvlgrey
-			thickness = 0.5
+			thickness = 2
+			spacing = 1
 		</axis>
 	</axes>
 
 </plot>
 
-#### not showing the inner stacked plot ####
-#<plot>
-#	type = scatter
-#	file = ./../data_tracks/stacked.txt
-#	r1 = 0.20r
-#	r0 = 0.05r
-#	glyph = rectangle
-#	glyph_size = 8
-#	fill_color = 116,196,118
-#	stroke_color = vvdgrey
-#	stroke_thickness = 0
-#	orientation = in
-#
-#	<axes>
-#		<axis>
-#			color     = lgrey
-#			thickness = 0
-#		</axis>
-#	</axes>
-#
-#</plot>
+<plot>
+	type = scatter
+	file = ./../data_tracks/stacked.txt
+	r1 = 0.20r
+	r0 = 0.05r
+	glyph = rectangle
+	glyph_size = 8
+	fill_color = 116,196,118
+	stroke_color = vvdgrey
+	stroke_thickness = 1
+	orientation = in
+	<backgrounds>
+		<background>
+			color = vvlgrey
+		</background>
+	</backgrounds>
+
+	<axes>
+		<axis>
+			color     = lgrey
+			thickness = 2
+			spacing   = 1
+		</axis>
+	</axes>
+
+</plot>
 
 <plot>
 	type = text

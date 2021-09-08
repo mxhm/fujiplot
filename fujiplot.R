@@ -1,11 +1,42 @@
+#### debug options ####
+
+# setwd("/mnt/obi0/mhomilius/projects/fujiplot/")
+# fullargs <- c(
+#   "/usr/lib/R/bin/exec/R",
+#   "--no-echo",
+#   "--no-restore",
+#   "--file=fujiplot.R",
+#   "--args",
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/input_cell_type_gated_quantile_all.txt",
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/traitlist_cell_type_gated_quantile_all.txt",
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/output/cell_type_gated_quantile_all"
+# )
+# 
+# args <- c(
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/input_cell_type_gated_quantile_all.txt",
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/traitlist_cell_type_gated_quantile_all.txt",
+#   "/mnt/obi0/phi/gwas/gwas_analyses/sysmex_custom_gates_v9-obi2020_10_28/circos/output/cell_type_gated_quantile_all"
+# )
+
+####
+
 fullargs <- commandArgs(trailingOnly=FALSE)
 args <- commandArgs(trailingOnly=TRUE)
+
+#print(fullargs)
+#stop()
 
 script_name <- normalizePath(sub("--file=", "", fullargs[grep("--file=", fullargs)]))
 script_dir <- dirname(script_name)
 
 suppressMessages(library(dplyr))
 library(stringr)
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+library(gridExtra)
+library(forcats)
+
 
 # constants
 .VERSION = "1.0.3"
@@ -15,8 +46,8 @@ CIRCOS_PATH = "circos"
 CIRCOS_DEBUG_GROUP = "summary"
 OUTPUT_BARPLOT = TRUE
 SCATTER_BACKGROUND_COLOR_ALPHA = 0.3
-LARGE_POINT_SIZE = 16
-SMALL_POINT_SIZE = 8
+LARGE_POINT_SIZE = 18
+SMALL_POINT_SIZE = 12
 
 # intermediate files
 COLOR_CONF =              file.path(script_dir, "config",      "color.conf")
@@ -128,10 +159,16 @@ nsnps_per_locus = df %>% group_by(LOCUS_ID) %>% summarize(n = n())
 df = df %>% mutate(CHR = str_c("hs", CHR),
                    nsnps = nsnps_per_locus$n[match(LOCUS_ID, nsnps_per_locus$LOCUS_ID)])
 
+
+# CHANGED: showing all loci
+# inter_categorical = df %>% group_by(LOCUS_ID) %>% summarize(CHR = most_common(CHR),
+#                                                             BP = most_common(BP),
+#                                                             n = length(unique(CATEGORY))) %>%
+#                                                   filter(n > 1)
 inter_categorical = df %>% group_by(LOCUS_ID) %>% summarize(CHR = most_common(CHR),
                                                             BP = most_common(BP),
-                                                            n = length(unique(CATEGORY))) %>%
-                                                  filter(n > 1)
+                                                            n = length(unique(CATEGORY)))
+
 write.table(inter_categorical[c("CHR", "BP", "BP")], HIGHLIGHT_DATA, sep = "\t", row.names = F, col.names = F, quote = F)
 message(sprintf("* Highlights data (inter-categorical pleiotropic loci): %s", HIGHLIGHT_DATA))
 
@@ -140,13 +177,20 @@ message(sprintf("* Highlights data (inter-categorical pleiotropic loci): %s", HI
 # output outer scatter plot data
 scatter = merge(df, traitlist, by = "TRAIT", all.x = T)
 scatter$value = nrow(traitlist) - scatter$idx
-scatter$parameters = str_c(scatter$parameters, str_c('z=', scatter$nsnps), str_c('glyph_size=', ifelse(scatter$nsnps > 1, LARGE_POINT_SIZE, SMALL_POINT_SIZE)), sep = ",")
+
+# CHANGED use large or small points based on whether there is an annotated gene or intergenic region
+#scatter$parameters = str_c(scatter$parameters, str_c('z=', scatter$nsnps), str_c('glyph_size=', ifelse(scatter$nsnps > 1, LARGE_POINT_SIZE, SMALL_POINT_SIZE)), sep = ",")
+scatter$parameters = str_c(scatter$parameters, str_c('z=', scatter$nsnps), str_c('glyph_size=', ifelse(!is.na(scatter$GENE.x) & !is.na(scatter$GENE.y), LARGE_POINT_SIZE, SMALL_POINT_SIZE)), sep = ",")
+
 scatter = scatter[order(scatter$nsnps, decreasing=T),]
 write.table(scatter[c("CHR", "BP", "BP", "value", "parameters")], SCATTER_DATA, sep = "\t", row.names = F, col.names = F, quote = F)
 message(sprintf("* Scatter plot data (significant loci): %s", SCATTER_DATA))
 
 
 ################################################################################
+
+# TODO change or drop the stacked data viz
+
 # output inner stacked scatter plot data
 stacked = list()
 stacked_y = rep(0, n_loci)
@@ -166,12 +210,20 @@ write.table(stacked[c("CHR", "BP", "BP", "value", "parameters")], STACKED_DATA, 
 message(sprintf("* Stacked bar plot data (# significant SNPs per locus): %s", STACKED_DATA))
 
 ################################################################################
+
 # output label data
+# CHANGED: dropping NA labels
+# label = df %>% filter(LOCUS_ID %in% inter_categorical$LOCUS_ID) %>%
+#                  group_by(LOCUS_ID) %>%
+#                    summarize(CHR = most_common(CHR),
+#                              BP = most_common(BP),
+#                              GENE = most_common(GENE))
 label = df %>% filter(LOCUS_ID %in% inter_categorical$LOCUS_ID) %>%
-                 group_by(LOCUS_ID) %>%
-                   summarize(CHR = most_common(CHR),
-                             BP = most_common(BP),
-                             GENE = most_common(GENE))
+  group_by(LOCUS_ID) %>%
+  filter(!is.na(GENE)) %>%
+  summarize(CHR = most_common(CHR),
+            BP = most_common(BP),
+            GENE = most_common(GENE))
 write.table(label[c("CHR", "BP", "BP", "GENE")], LABEL_DATA, sep = "\t", row.names = F, col.names = F, quote = F)
 message(sprintf("* Label data (name of inter-categorical pleiotropic loci): %s", LABEL_DATA))
 
@@ -217,12 +269,204 @@ if (OUTPUT_BARPLOT) {
                       intra_categorical = pleiotropic - inter_categorical)
   bar = merge(bar, traitlist, by = "TRAIT")
   bar = bar[order(bar$idx, decreasing=T),]
-  rownames(bar) = bar$TRAIT
+  #rownames(bar) = bar$TRAIT
 
-  cairo_pdf(file.path(output_dir, "barplot.pdf"), width = 8, height = 8, family = "Helvetica")
-    barplot(t(bar[,c("inter_categorical", "intra_categorical", "single")]), ylim = c(0, 100), space = 0, col = c("black", "grey50", "white"))
+  cairo_pdf(file.path(output_dir, "barplot.pdf"), width = 8, height = 4, family = "Helvetica")
+    barplot(t(bar[,c("inter_categorical", "intra_categorical", "single")]), ylim = c(0, 10), space = 0, col = c("black", "grey50", "white"))
   . = dev.off()
 }
+
+
+################################################################################
+# additional plots
+
+# TODO remove unused plots
+
+bar_df <- data.table(bar)
+bar_df_m <-  melt(bar_df, measure.vars=c('total', 'inter_categorical', 'intra_categorical', 'single'))
+
+bar_df_m$fill <- '#ffffff'
+bar_df_m[variable == 'inter_categorical']$fill <- bar_df_m[variable == 'inter_categorical']$COLOR
+
+bar_df_m$fill <- relevel(as.factor(bar_df_m$fill), '#ffffff')
+bar_df_m$TRAIT <- factor(bar_df_m$TRAIT, levels=levels(fct_inorder(bar$TRAIT)))
+bar_df_m$CATEGORY2 <- fct_rev(fct_inorder(bar_df_m$CATEGORY2))
+bar_df_m$CATEGORY <- fct_rev(fct_inorder(bar_df_m$CATEGORY))
+
+ggplot(bar_df_m, aes(TRAIT, value)) +
+  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+  #theme_minimal() +
+  theme_classic() +
+  theme(panel.spacing.y = unit(0, "lines"),
+        strip.background = element_blank(),
+        strip.text.y.left = element_text(angle = 0),
+        axis.ticks.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank()
+        ) +
+  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
+  facet_grid(CATEGORY2~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip()
+ggsave(file.path(output_dir, "barplot2.pdf"), width = 4, height = 8)
+ggsave(file.path(output_dir, "barplot2_large.pdf"), width = 10, height = 20)
+
+ggplot(bar_df_m, aes(TRAIT, value)) +
+  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+  theme_classic() +
+  theme(panel.spacing.y = unit(0, "lines"),
+        strip.background = element_blank(),
+        #strip.text.y.left = element_text(angle = 0),
+        strip.text.y.left = element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.line.y=element_blank()
+  ) +
+  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
+  facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip()
+ggsave(file.path(output_dir, "barplot3.pdf"), width = 2, height = 3)
+
+bars_plot <- ggplot(bar_df_m, aes(TRAIT, value)) +
+  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+  theme_classic() +
+  theme(panel.spacing.y = unit(0, "lines"),
+        strip.background = element_blank(),
+        strip.text.y.left = element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.line.y=element_blank()
+  ) +
+  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
+  facet_grid(CATEGORY2~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip()
+
+bars_plot2 <- ggplot(bar_df_m, aes(TRAIT, value)) +
+  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+  theme_classic() +
+  theme(panel.spacing.y = unit(0, "lines"),
+        strip.background = element_blank(),
+        strip.text.y.left = element_text(angle = 0),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.line.y=element_blank()
+  ) +
+  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
+  facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip()
+
+trait_category_colors <- unique(bar_df_m[, c('TRAIT', 'CATEGORY2', 'COLOR')])
+
+category_counts <- data.table(table(trait_category_colors$CATEGORY2))
+setnames(category_counts, 'V1', 'CATEGORY2')
+category_counts$N_summed <- cumsum(category_counts$N)
+
+category_counts <- merge(category_counts, unique(trait_category_colors[, c('CATEGORY2', 'COLOR')]))
+category_counts$CATEGORY2 <- factor(category_counts$CATEGORY2, levels = levels(bar_df_m$CATEGORY2))
+
+ggplot(category_counts, aes(x=1, y=-N_summed, label=CATEGORY2, color=I(COLOR))) +
+  geom_text_repel(
+    box.padding = 0.5,
+    #nudge_y = 1,
+    #segment.curvature = -0.1,
+    #segment.ncp = 3,
+    #segment.angle = 20,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    force        = 0.5,
+    nudge_x      = -0.5,
+    direction    = "x",
+    hjust        = 1,
+    #segment.size = 0.2
+  ) +
+  theme_void(base_size = 16)
+ggsave(file.path(output_dir, "labels.pdf"), width = 5, height = 3)
+
+labels_plot <- ggplot(category_counts, aes(x=1, y=-N_summed, label=CATEGORY2, color=I(COLOR))) +
+  geom_text_repel(
+    box.padding = 0.5,
+    #nudge_y = 1,
+    #segment.curvature = -0.1,
+    #segment.ncp = 3,
+    #segment.angle = 20,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    force        = 0.5,
+    nudge_x      = -0.5,
+    direction    = "x",
+    hjust        = 1,
+    #segment.size = 0.2
+  ) +
+  theme_void(base_size = 16)
+
+label_bar_plot <- grid.arrange(labels_plot, bars_plot2, ncol=2)
+ggsave(label_bar_plot, filename = file.path(output_dir, "labeled_bars.pdf"), width = 10, height = 3)
+
+# gridplot <- plot_grid(
+#   labels_plot,
+#   bars_plot2,
+#   #vjust = -1,
+#   nrow = 1,
+#   align = 'v', axis = 'tl',
+#   rel_heights = c(2, 1)
+# )
+# ggsave(gridplot, filename = file.path(output_dir, "labeled_bars.pdf"), width = 7, height = 3)
+
+
+cols
+colsep
+
+cols_df <- data.table(cols)
+cols_df$cols_idx <- as.numeric(rownames(cols))
+cols_df$colsep <- colsep
+cols_df$category_upper <- toupper(cols_df$category_lower)
+
+# using this one for quantile celltype
+#  label=category_lower
+
+labels_plot2 <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_upper, color=I(COLOR))) +
+  geom_text_repel(
+    #box.padding = 0.5,
+    #nudge_y = 1,
+    #segment.curvature = -0.1,
+    #segment.ncp = 3,
+    #segment.angle = 20,
+    max.overlaps = Inf,
+    min.segment.length = 0,
+    #force        = 0.1,
+    nudge_x      = -0.001,
+    direction    = "x",
+    #hjust        = 1,
+    #segment.size = 0.2
+  ) +
+  theme_void(base_size = 20)
+#labels_plot2
+ggsave(file.path(output_dir, "labels_quantile_celltype.pdf"), width = 3, height = 2)
+
+
+# labels_plot2 <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_lower, color=I(COLOR))) +
+#   geom_text_repel(
+#     #box.padding = 0.5,
+#     #nudge_y = 1,
+#     #segment.curvature = -0.1,
+#     #segment.ncp = 3,
+#     #segment.angle = 20,
+#     max.overlaps = Inf,
+#     min.segment.length = 0,
+#     #force        = 0.1,
+#     nudge_x      = 0.001,
+#     direction    = "x",
+#     #hjust        = 1,
+#     #segment.size = 0.2
+#   ) +
+#   theme_void(base_size = 16)
+# #labels_plot2
+# ggsave(file.path(output_dir, "labels_quantile_celltype.pdf"), width = 1.5, height = 2)
 
 writeLines(c("", "",
              sprintf("* Final circos outputs: %s.{png,svg}.", file.path(output_dir, 'circos')),
