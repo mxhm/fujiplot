@@ -155,7 +155,8 @@ message(sprintf("* Scatter background configuration: %s", SCATTER_BACKGROUND_CON
 
 ################################################################################
 # output pleiotropy highlight data
-nsnps_per_locus = df %>% group_by(LOCUS_ID) %>% summarize(n = n())
+#nsnps_per_locus = df %>% group_by(LOCUS_ID) %>% summarize(n = n())
+nsnps_per_locus2 = df %>% group_by(LOCUS_ID, MARKER) %>% select(MARKER) %>% summarize(n = n_distinct())
 df = df %>% mutate(CHR = str_c("hs", CHR),
                    nsnps = nsnps_per_locus$n[match(LOCUS_ID, nsnps_per_locus$LOCUS_ID)])
 
@@ -280,8 +281,6 @@ if (OUTPUT_BARPLOT) {
 ################################################################################
 # additional plots
 
-# TODO remove unused plots
-
 bar_df <- data.table(bar)
 bar_df_m <-  melt(bar_df, measure.vars=c('total', 'inter_categorical', 'intra_categorical', 'single'))
 
@@ -293,24 +292,7 @@ bar_df_m$TRAIT <- factor(bar_df_m$TRAIT, levels=levels(fct_inorder(bar$TRAIT)))
 bar_df_m$CATEGORY2 <- fct_rev(fct_inorder(bar_df_m$CATEGORY2))
 bar_df_m$CATEGORY <- fct_rev(fct_inorder(bar_df_m$CATEGORY))
 
-ggplot(bar_df_m, aes(TRAIT, value)) +
-  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
-  #theme_minimal() +
-  theme_classic() +
-  theme(panel.spacing.y = unit(0, "lines"),
-        strip.background = element_blank(),
-        strip.text.y.left = element_text(angle = 0),
-        axis.ticks.y=element_blank(),
-        axis.title.y=element_blank(),
-        axis.title.x=element_blank()
-        ) +
-  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
-  facet_grid(CATEGORY2~., scales = "free_y", space = "free_y", switch = "y") +
-  coord_flip()
-ggsave(file.path(output_dir, "barplot2.pdf"), width = 4, height = 8)
-ggsave(file.path(output_dir, "barplot2_large.pdf"), width = 10, height = 20)
-
-ggplot(bar_df_m, aes(TRAIT, value)) +
+ggplot(bar_df_m[variable == 'total'], aes(TRAIT, value)) +
   geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
   theme_classic() +
   theme(panel.spacing.y = unit(0, "lines"),
@@ -326,13 +308,34 @@ ggplot(bar_df_m, aes(TRAIT, value)) +
   scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
   facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
   coord_flip()
-ggsave(file.path(output_dir, "barplot3.pdf"), width = 2, height = 3)
 
-bars_plot <- ggplot(bar_df_m, aes(TRAIT, value)) +
-  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+
+ggsave(file.path(output_dir, "barplot.pdf"), width = 2, height = 3)
+
+# get the unique number of SNPs / MARKERS per TRAIT
+# should not use the number of rows
+nsnps_per_trait = df %>%
+  group_by(TRAIT) %>%
+  summarize(
+    marker_ct = n_distinct(MARKER),
+    locus_ct = n_distinct(LOCUS_ID),
+    gene_ct = n_distinct(GENE)
+  )
+
+nsnps_per_trait <- merge(nsnps_per_trait, unique(bar_df[, c('TRAIT', 'CATEGORY', 'COLOR')]))
+
+nsnps_per_trait$TRAIT <- factor(nsnps_per_trait$TRAIT, levels=levels(fct_inorder(bar$TRAIT)))
+#nsnps_per_trait$CATEGORY2 <- fct_rev(fct_inorder(nsnps_per_trait$CATEGORY2))
+#nsnps_per_trait$CATEGORY <- fct_rev(fct_inorder(nsnps_per_trait$CATEGORY))
+nsnps_per_trait$CATEGORY <- fct_rev(factor(nsnps_per_trait$CATEGORY, levels=levels(fct_inorder(bar$CATEGORY))))
+
+ggplot(nsnps_per_trait, aes(TRAIT, marker_ct)) +
+  geom_bar(aes(fill=I(COLOR), color=I(COLOR)), stat='identity', position='stack') +
+  #coord_cartesian() +
   theme_classic() +
   theme(panel.spacing.y = unit(0, "lines"),
         strip.background = element_blank(),
+        #strip.text.y.left = element_text(angle = 0),
         strip.text.y.left = element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank(),
@@ -340,96 +343,68 @@ bars_plot <- ggplot(bar_df_m, aes(TRAIT, value)) +
         axis.title.x=element_blank(),
         axis.line.y=element_blank()
   ) +
-  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
-  facet_grid(CATEGORY2~., scales = "free_y", space = "free_y", switch = "y") +
-  coord_flip()
+  scale_y_continuous(
+    #limits=c(0, 10),
+    breaks = c(1, 5, 10),
+    #trans='log10'
+    ) +
+  facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip(ylim = c(0, 10))
+ggsave(file.path(output_dir, "barplot_marker_count.pdf"), width = 1, height = 2)
 
-bars_plot2 <- ggplot(bar_df_m, aes(TRAIT, value)) +
-  geom_bar(aes(fill=I(fill), color=I(COLOR)), stat='identity', position='stack') +
+ggplot(nsnps_per_trait, aes(TRAIT, gene_ct)) +
+  geom_bar(aes(fill=I(COLOR), color=I(COLOR)), stat='identity', position='stack') +
+  #coord_cartesian() +
   theme_classic() +
   theme(panel.spacing.y = unit(0, "lines"),
         strip.background = element_blank(),
-        strip.text.y.left = element_text(angle = 0),
+        #strip.text.y.left = element_text(angle = 0),
+        strip.text.y.left = element_blank(),
         axis.text.y=element_blank(),
         axis.ticks.y=element_blank(),
         axis.title.y=element_blank(),
         axis.title.x=element_blank(),
         axis.line.y=element_blank()
   ) +
-  scale_y_continuous(limits=c(0, 10), breaks = c(0, 5, 10)) +
+  scale_y_continuous(
+    #limits=c(0, 10),
+    breaks = c(1, 5, 10),
+    #trans='log10'
+  ) +
   facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
-  coord_flip()
+  coord_flip(ylim = c(0, 10))
+ggsave(file.path(output_dir, "barplot_gene_count.pdf"), width = 1, height = 2)
 
-trait_category_colors <- unique(bar_df_m[, c('TRAIT', 'CATEGORY2', 'COLOR')])
-
-category_counts <- data.table(table(trait_category_colors$CATEGORY2))
-setnames(category_counts, 'V1', 'CATEGORY2')
-category_counts$N_summed <- cumsum(category_counts$N)
-
-category_counts <- merge(category_counts, unique(trait_category_colors[, c('CATEGORY2', 'COLOR')]))
-category_counts$CATEGORY2 <- factor(category_counts$CATEGORY2, levels = levels(bar_df_m$CATEGORY2))
-
-ggplot(category_counts, aes(x=1, y=-N_summed, label=CATEGORY2, color=I(COLOR))) +
-  geom_text_repel(
-    box.padding = 0.5,
-    #nudge_y = 1,
-    #segment.curvature = -0.1,
-    #segment.ncp = 3,
-    #segment.angle = 20,
-    max.overlaps = Inf,
-    min.segment.length = 0,
-    force        = 0.5,
-    nudge_x      = -0.5,
-    direction    = "x",
-    hjust        = 1,
-    #segment.size = 0.2
+ggplot(nsnps_per_trait, aes(TRAIT, marker_ct)) +
+  geom_bar(aes(fill=I(COLOR), color=I(COLOR)), stat='identity', position='stack') +
+  #coord_cartesian() +
+  theme_classic() +
+  theme(panel.spacing.y = unit(0, "lines"),
+        strip.background = element_blank(),
+        #strip.text.y.left = element_text(angle = 0),
+        strip.text.y.left = element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.line.y=element_blank()
   ) +
-  theme_void(base_size = 16)
-ggsave(file.path(output_dir, "labels.pdf"), width = 5, height = 3)
-
-labels_plot <- ggplot(category_counts, aes(x=1, y=-N_summed, label=CATEGORY2, color=I(COLOR))) +
-  geom_text_repel(
-    box.padding = 0.5,
-    #nudge_y = 1,
-    #segment.curvature = -0.1,
-    #segment.ncp = 3,
-    #segment.angle = 20,
-    max.overlaps = Inf,
-    min.segment.length = 0,
-    force        = 0.5,
-    nudge_x      = -0.5,
-    direction    = "x",
-    hjust        = 1,
-    #segment.size = 0.2
+  scale_y_continuous(
+    #limits=c(0, 10),
+    breaks = c(10, 5, 1),
+    #trans='log10'
+    #limits=rev
   ) +
-  theme_void(base_size = 16)
-
-label_bar_plot <- grid.arrange(labels_plot, bars_plot2, ncol=2)
-ggsave(label_bar_plot, filename = file.path(output_dir, "labeled_bars.pdf"), width = 10, height = 3)
-
-# gridplot <- plot_grid(
-#   labels_plot,
-#   bars_plot2,
-#   #vjust = -1,
-#   nrow = 1,
-#   align = 'v', axis = 'tl',
-#   rel_heights = c(2, 1)
-# )
-# ggsave(gridplot, filename = file.path(output_dir, "labeled_bars.pdf"), width = 7, height = 3)
-
-
-cols
-colsep
+  facet_grid(CATEGORY~., scales = "free_y", space = "free_y", switch = "y") +
+  coord_flip(ylim = c(10, 1))
+ggsave(file.path(output_dir, "barplot_marker_count_rev.pdf"), width = 1, height = 2)
 
 cols_df <- data.table(cols)
 cols_df$cols_idx <- as.numeric(rownames(cols))
 cols_df$colsep <- colsep
 cols_df$category_upper <- toupper(cols_df$category_lower)
 
-# using this one for quantile celltype
-#  label=category_lower
-
-labels_plot2 <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_upper, color=I(COLOR))) +
+labels_plot <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_upper, color=I(COLOR))) +
   geom_text_repel(
     #box.padding = 0.5,
     #nudge_y = 1,
@@ -445,28 +420,7 @@ labels_plot2 <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_upper, colo
     #segment.size = 0.2
   ) +
   theme_void(base_size = 20)
-#labels_plot2
-ggsave(file.path(output_dir, "labels_quantile_celltype.pdf"), width = 3, height = 2)
-
-
-# labels_plot2 <- ggplot(cols_df, aes(x=1, y=-cols_idx, label=category_lower, color=I(COLOR))) +
-#   geom_text_repel(
-#     #box.padding = 0.5,
-#     #nudge_y = 1,
-#     #segment.curvature = -0.1,
-#     #segment.ncp = 3,
-#     #segment.angle = 20,
-#     max.overlaps = Inf,
-#     min.segment.length = 0,
-#     #force        = 0.1,
-#     nudge_x      = 0.001,
-#     direction    = "x",
-#     #hjust        = 1,
-#     #segment.size = 0.2
-#   ) +
-#   theme_void(base_size = 16)
-# #labels_plot2
-# ggsave(file.path(output_dir, "labels_quantile_celltype.pdf"), width = 1.5, height = 2)
+ggsave(file.path(output_dir, "circos_labels.pdf"), width = 3, height = 2)
 
 writeLines(c("", "",
              sprintf("* Final circos outputs: %s.{png,svg}.", file.path(output_dir, 'circos')),
