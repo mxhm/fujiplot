@@ -155,8 +155,8 @@ message(sprintf("* Scatter background configuration: %s", SCATTER_BACKGROUND_CON
 
 ################################################################################
 # output pleiotropy highlight data
-#nsnps_per_locus = df %>% group_by(LOCUS_ID) %>% summarize(n = n())
-nsnps_per_locus2 = df %>% group_by(LOCUS_ID, MARKER) %>% select(MARKER) %>% summarize(n = n_distinct())
+nsnps_per_locus = df %>% group_by(LOCUS_ID) %>% summarize(n = n())
+#nsnps_per_locus = df %>% group_by(LOCUS_ID, MARKER) %>% select(MARKER) %>% summarize(n = n_distinct())
 df = df %>% mutate(CHR = str_c("hs", CHR),
                    nsnps = nsnps_per_locus$n[match(LOCUS_ID, nsnps_per_locus$LOCUS_ID)])
 
@@ -323,7 +323,6 @@ nsnps_per_trait = df %>%
   )
 
 nsnps_per_trait <- merge(nsnps_per_trait, unique(bar_df[, c('TRAIT', 'CATEGORY', 'COLOR')]))
-
 nsnps_per_trait$TRAIT <- factor(nsnps_per_trait$TRAIT, levels=levels(fct_inorder(bar$TRAIT)))
 #nsnps_per_trait$CATEGORY2 <- fct_rev(fct_inorder(nsnps_per_trait$CATEGORY2))
 #nsnps_per_trait$CATEGORY <- fct_rev(fct_inorder(nsnps_per_trait$CATEGORY))
